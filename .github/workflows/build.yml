@@ -1,0 +1,52 @@
+name: Compilar ROM (FireRed + Roupas + Seguidor + PT-BR)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar dependencias
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential binutils-arm-none-eabi git libpng-dev unzip
+
+      - name: Baixar o pokefirered (versao exata) e aplicar os pacotes
+        run: |
+          mkdir ../pf && cd ../pf
+          git init -q
+          git remote add origin https://github.com/pret/pokefirered.git
+          git fetch --depth 1 origin ce6406d8c2eaf46d543c8a2606de0c3cb1951982
+          git checkout -q FETCH_HEAD
+          # 1) roupas + seguidor
+          unzip -o -q "$GITHUB_WORKSPACE/overlay.zip" -d .
+          # 2) traducao PT-BR (opcional: so se o traducao.zip estiver no repositorio)
+          if [ -f "$GITHUB_WORKSPACE/traducao.zip" ]; then
+            echo "Aplicando traducao.zip"
+            unzip -o -q "$GITHUB_WORKSPACE/traducao.zip" -d .
+          else
+            echo "traducao.zip nao encontrado, compilando sem traducao"
+          fi
+
+      - name: Compilar o agbcc (compilador C do GBA)
+        run: |
+          git clone --depth 1 https://github.com/pret/agbcc.git ../agbcc
+          cd ../agbcc
+          ./build.sh
+          ./install.sh ../pf
+
+      - name: Compilar a ROM
+        run: |
+          cd ../pf
+          make -j"$(nproc)"
+          cp pokefirered.gba "$GITHUB_WORKSPACE/pokefirered.gba"
+
+      - name: Enviar a ROM
+        uses: actions/upload-artifact@v4
+        with:
+          name: pokefirered-ptbr
+          path: pokefirered.gba
